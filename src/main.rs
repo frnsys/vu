@@ -17,12 +17,15 @@ use image::{
 };
 use pixels::{Error, Pixels, SurfaceTexture};
 use winit::{
-    dpi::LogicalSize,
+    dpi::{LogicalSize, PhysicalSize},
     event::{Event, KeyEvent, WindowEvent},
     event_loop::{EventLoop, EventLoopBuilder},
     keyboard::{KeyCode, PhysicalKey},
     window::{WindowBuilder, WindowLevel},
 };
+
+/// Minimum margin around images.
+const MARGIN: u32 = 50;
 
 /// We can have either a single image
 /// or a sequence of images (i.e. an animated gif).
@@ -70,6 +73,8 @@ fn main() -> Result<(), Error> {
         .next()
         .expect("Couldn't find the primary monitor");
     let mon_size = mon.size();
+    let scale_factor = mon.scale_factor();
+    let (mon_width, mon_height) = (mon_size.width - MARGIN * 2, mon_size.height - MARGIN * 2);
 
     // Handle gifs.
     if path.extension().is_some_and(|ext| ext == "gif") {
@@ -96,17 +101,23 @@ fn main() -> Result<(), Error> {
         let should_run = Arc::clone(&is_running);
         let proxy = event_loop.create_proxy();
         let handle = thread::spawn(move || {
-            while should_run.load(Ordering::SeqCst) {
+            'outer: while should_run.load(Ordering::SeqCst) {
                 for delay in &delays {
                     thread::sleep(Duration::from_secs_f64(*delay));
-                    proxy
-                        .send_event(RequestNextFrame)
-                        .expect("Failed to send event");
+                    if proxy.send_event(RequestNextFrame).is_err() {
+                        break 'outer;
+                    }
                 }
             }
         });
 
-        run(event_loop, title, Image::Sequence(frames), size)?;
+        run(
+            event_loop,
+            title,
+            Image::Sequence(frames),
+            size,
+            scale_factor,
+        )?;
 
         // We're quitting, let the thread know
         // and wait for it to finish.
@@ -119,13 +130,18 @@ fn main() -> Result<(), Error> {
             Ok(mut img) => {
                 // Resize to fit if needed.
                 let size = img.dimensions();
-                if size.0 > mon_size.width || size.1 > mon_size.height {
-                    img = img.resize(mon_size.width, mon_size.height, FilterType::Triangle);
+                if size.0 > mon_width || size.1 > mon_height {
+                    img = img.resize(mon_width, mon_height, FilterType::Triangle);
                 }
                 let rgba = img.to_rgba8();
-
                 let pixels: &[u8] = rgba.as_raw();
-                run(event_loop, title, Image::Single(pixels), img.dimensions())?;
+                run(
+                    event_loop,
+                    title,
+                    Image::Single(pixels),
+                    img.dimensions(),
+                    scale_factor,
+                )?;
             }
             Err(e) => {
                 eprintln!("Failed to load image: {}", e);
@@ -142,19 +158,21 @@ fn run(
     title: &str,
     img: Image,
     (width, height): (u32, u32),
+    scale_factor: f64,
 ) -> Result<(), Error> {
+    let size = PhysicalSize::new(width as f64, height as f64);
+
     // Note: For Wayland positioning has to happen via the window manager.
     let window = WindowBuilder::new()
         .with_title(title)
         .with_resizable(false)
         .with_decorations(false)
         .with_window_level(WindowLevel::AlwaysOnTop)
-        .with_inner_size(LogicalSize::new(width as f64, height as f64))
+        .with_inner_size(LogicalSize::<f64>::from_physical(size, scale_factor))
         .build(&event_loop)
         .unwrap();
 
-    let window_size = window.inner_size();
-    let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
+    let surface_texture = SurfaceTexture::new(width, height, &window);
     let mut pixels = Pixels::new(width, height, surface_texture)?;
     pixels.frame_mut().copy_from_slice(img.get_frame(0));
 
