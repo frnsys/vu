@@ -15,7 +15,7 @@ use std::{
 use image::{
     codecs::gif::GifDecoder, imageops::FilterType, AnimationDecoder, GenericImageView, ImageDecoder,
 };
-use pixels::{Error, Pixels, SurfaceTexture};
+use pixels::{wgpu::Color, Error, PixelsBuilder, SurfaceTexture};
 use winit::{
     dpi::{LogicalSize, PhysicalSize},
     event::{Event, KeyEvent, WindowEvent},
@@ -26,6 +26,9 @@ use winit::{
 
 /// Minimum margin around images.
 const MARGIN: u32 = 50;
+
+/// Transparent/background color.
+const CLEAR_COLOR: Color = Color::BLUE;
 
 /// We can have either a single image
 /// or a sequence of images (i.e. an animated gif).
@@ -173,7 +176,9 @@ fn run(
         .unwrap();
 
     let surface_texture = SurfaceTexture::new(width, height, &window);
-    let mut pixels = Pixels::new(width, height, surface_texture)?;
+    let mut pixels = PixelsBuilder::new(width, height, surface_texture)
+        .clear_color(CLEAR_COLOR)
+        .build()?;
     pixels.frame_mut().copy_from_slice(img.get_frame(0));
 
     let mut frame_idx = 0;
