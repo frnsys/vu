@@ -1,8 +1,7 @@
 use std::{
-    env,
     fs::File,
     io::BufReader,
-    path::Path,
+    path::PathBuf,
     process::exit,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -52,19 +51,39 @@ impl Image<'_> {
 #[derive(Debug)]
 struct RequestNextFrame;
 
-fn main() -> Result<(), Error> {
-    let args: Vec<String> = env::args().skip(1).collect();
-    if args.is_empty() {
-        println!("Please provide an image path.");
-        exit(1);
+#[derive(Debug)]
+struct Args {
+    path: PathBuf,
+    title: String,
+    no_focus: bool,
+}
+impl Args {
+    fn parse() -> Result<Self, pico_args::Error> {
+        let mut pargs = pico_args::Arguments::from_env();
+        let args = Self {
+            path: pargs.free_from_os_str(parse_path)?,
+            title: pargs.opt_value_from_str("--title")?.unwrap_or("vu".into()),
+            no_focus: pargs.contains(["-n", "--no-focus"]),
+        };
+        Ok(args)
     }
+}
+fn parse_path(s: &std::ffi::OsStr) -> Result<PathBuf, &'static str> {
+    Ok(s.into())
+}
+
+fn main() -> Result<(), Error> {
+    let args = match Args::parse() {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Error: {}.", e);
+            exit(1);
+        }
+    };
 
     // Use this as a flag to indicate when the frame delay thread
     // should terminate.
     let is_running = Arc::new(AtomicBool::new(true));
-
-    let path = Path::new(&args[0]);
-    let title = args.get(1).map(String::as_str).unwrap_or("vu");
 
     let event_loop = EventLoopBuilder::<RequestNextFrame>::with_user_event()
         .build()
@@ -80,9 +99,9 @@ fn main() -> Result<(), Error> {
     let (mon_width, mon_height) = (mon_size.width - MARGIN * 2, mon_size.height - MARGIN * 2);
 
     // Handle gifs.
-    if path.extension().is_some_and(|ext| ext == "gif") {
+    if args.path.extension().is_some_and(|ext| ext == "gif") {
         // Load and extract all the frames.
-        let file = File::open(path).expect("Failed to read gif");
+        let file = File::open(args.path).expect("Failed to read gif");
         let reader = BufReader::new(file);
         let decoder = GifDecoder::new(reader).expect("Failed to decode gif");
         let size = decoder.dimensions();
@@ -116,8 +135,9 @@ fn main() -> Result<(), Error> {
 
         run(
             event_loop,
-            title,
+            &args.title,
             Image::Sequence(frames),
+            !args.no_focus,
             size,
             scale_factor,
         )?;
@@ -129,7 +149,7 @@ fn main() -> Result<(), Error> {
 
     // Display a single static image.
     } else {
-        match image::open(path) {
+        match image::open(args.path) {
             Ok(mut img) => {
                 // Resize to fit if needed.
                 let size = img.dimensions();
@@ -140,8 +160,9 @@ fn main() -> Result<(), Error> {
                 let pixels: &[u8] = rgba.as_raw();
                 run(
                     event_loop,
-                    title,
+                    &args.title,
                     Image::Single(pixels),
+                    !args.no_focus,
                     img.dimensions(),
                     scale_factor,
                 )?;
@@ -160,6 +181,7 @@ fn run(
     event_loop: EventLoop<RequestNextFrame>,
     title: &str,
     img: Image,
+    focus: bool,
     (width, height): (u32, u32),
     scale_factor: f64,
 ) -> Result<(), Error> {
@@ -199,6 +221,24 @@ fn run(
             } => {
                 if pixels.render().is_err() {
                     target.exit();
+                }
+            }
+            Event::WindowEvent {
+                event: WindowEvent::Focused(true),
+                ..
+            } => {
+                // This is a super-hacky, river-specific way
+                // of making the window unfocusable. Basically
+                // it punts focus back to whatever previously had focus.
+                // Ideally `winit` gets some better support for Wayland features;
+                // for example, in `sema` I use the `gtk` crate which lets you
+                // make a window unfocusable; I just don't want to port everything
+                // to that and this works ok for now.
+                if !focus {
+                    std::process::Command::new("riverctl")
+                        .args(["focus-view", "previous"])
+                        .output()
+                        .unwrap();
                 }
             }
 
