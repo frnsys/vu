@@ -49,6 +49,9 @@ impl Image {
 }
 
 /// Read frames from an animated format.
+///
+/// NOTE: `webp` decoding is slow and there's
+/// some compositing bug: <https://github.com/image-rs/image/issues/2320>
 fn read_frames<'a, D: AnimationDecoder<'a> + ImageDecoder>(decoder: D) -> Image {
     let size = decoder.dimensions();
     let decoded = decoder
@@ -72,7 +75,26 @@ fn read_frames<'a, D: AnimationDecoder<'a> + ImageDecoder>(decoder: D) -> Image 
     }
 }
 
-pub fn read_image(path: &Path, (max_width, max_height): (u32, u32)) -> Option<Image> {
+fn read_single(path: &Path, (max_width, max_height): (u32, u32)) -> Option<Image> {
+    match image::open(path) {
+        Ok(mut img) => {
+            // Resize to fit if needed.
+            let size = img.dimensions();
+            if size.0 > max_width || size.1 > max_height {
+                img = img.resize(max_width, max_height, FilterType::Triangle);
+            }
+            let rgba = img.to_rgba8();
+            let pixels: Vec<u8> = rgba.into_raw();
+            Some(Image::Single { data: pixels, size })
+        }
+        Err(e) => {
+            eprintln!("Failed to load image: {}", e);
+            None
+        }
+    }
+}
+
+pub fn read_image(path: &Path, max_size: (u32, u32)) -> Option<Image> {
     let ext = path.extension().and_then(|ext| ext.to_str());
     match ext {
         Some("gif") => {
@@ -85,25 +107,12 @@ pub fn read_image(path: &Path, (max_width, max_height): (u32, u32)) -> Option<Im
             let file = File::open(path).expect("Failed to read webp");
             let reader = BufReader::new(file);
             let decoder = WebPDecoder::new(reader).expect("Failed to decode webp");
-            Some(read_frames(decoder))
-        }
-        _ => {
-            match image::open(path) {
-                Ok(mut img) => {
-                    // Resize to fit if needed.
-                    let size = img.dimensions();
-                    if size.0 > max_width || size.1 > max_height {
-                        img = img.resize(max_width, max_height, FilterType::Triangle);
-                    }
-                    let rgba = img.to_rgba8();
-                    let pixels: Vec<u8> = rgba.into_raw();
-                    Some(Image::Single { data: pixels, size })
-                }
-                Err(e) => {
-                    eprintln!("Failed to load image: {}", e);
-                    None
-                }
+            if decoder.has_animation() {
+                Some(read_frames(decoder))
+            } else {
+                read_single(path, max_size)
             }
         }
+        _ => read_single(path, max_size),
     }
 }
