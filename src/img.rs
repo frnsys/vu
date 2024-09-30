@@ -79,9 +79,10 @@ fn read_single(path: &Path, (max_width, max_height): (u32, u32)) -> Option<Image
     match image::open(path) {
         Ok(mut img) => {
             // Resize to fit if needed.
-            let size = img.dimensions();
+            let mut size = img.dimensions();
             if size.0 > max_width || size.1 > max_height {
                 img = img.resize(max_width, max_height, FilterType::Triangle);
+                size = img.dimensions();
             }
             let rgba = img.to_rgba8();
             let pixels: Vec<u8> = rgba.into_raw();
