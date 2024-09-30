@@ -1,9 +1,9 @@
 use std::{fs::File, io::BufReader, path::Path};
 
+use fast_image_resize::{images::Image as FIRImage, FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{
     codecs::{gif::GifDecoder, webp::WebPDecoder},
-    imageops::FilterType,
-    AnimationDecoder, GenericImageView, ImageDecoder,
+    AnimationDecoder, DynamicImage, GenericImageView, ImageBuffer, ImageDecoder, RgbaImage,
 };
 
 /// We can have either a single image
@@ -75,13 +75,39 @@ fn read_frames<'a, D: AnimationDecoder<'a> + ImageDecoder>(decoder: D) -> Image 
     }
 }
 
+fn resize(src: DynamicImage, (dst_width, dst_height): (u32, u32)) -> DynamicImage {
+    let src_width = src.width();
+    let src_height = src.height();
+    let src_image = FIRImage::from_vec_u8(
+        src_width,
+        src_height,
+        src.to_rgba8().into_raw(),
+        fast_image_resize::PixelType::U8x4,
+    )
+    .unwrap();
+    let mut dst_image = FIRImage::new(dst_width, dst_height, src_image.pixel_type());
+    let mut resizer = Resizer::new();
+    resizer
+        .resize(
+            &src_image,
+            &mut dst_image,
+            &ResizeOptions::default().resize_alg(ResizeAlg::Convolution(FilterType::Hamming)),
+        )
+        .unwrap();
+
+    let image_buffer: RgbaImage =
+        ImageBuffer::from_raw(dst_width, dst_height, dst_image.into_vec())
+            .expect("Failed to convert resized buffer to ImageBuffer");
+    DynamicImage::ImageRgba8(image_buffer)
+}
+
 fn read_single(path: &Path, (max_width, max_height): (u32, u32)) -> Option<Image> {
     match image::open(path) {
         Ok(mut img) => {
             // Resize to fit if needed.
             let mut size = img.dimensions();
             if size.0 > max_width || size.1 > max_height {
-                img = img.resize(max_width, max_height, FilterType::Triangle);
+                img = resize(img, (max_width, max_height));
                 size = img.dimensions();
             }
             let rgba = img.to_rgba8();
