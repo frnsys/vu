@@ -106,8 +106,13 @@ fn read_single(path: &Path, (max_width, max_height): (u32, u32)) -> Option<Image
         Ok(mut img) => {
             // Resize to fit if needed.
             let mut size = img.dimensions();
-            if size.0 > max_width || size.1 > max_height {
-                img = resize(img, (max_width, max_height));
+            let width_scale = max_width as f32 / size.0 as f32;
+            let height_scale = max_height as f32 / size.1 as f32;
+            let scale = width_scale.min(height_scale);
+            if scale < 1. {
+                let target_width = (scale * size.0 as f32).round() as u32;
+                let target_height = (scale * size.1 as f32).round() as u32;
+                img = resize(img, (target_width, target_height));
                 size = img.dimensions();
             }
             let rgba = img.to_rgba8();

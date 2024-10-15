@@ -21,7 +21,7 @@ use winit::{
 };
 
 /// Minimum margin around images.
-const MARGIN: u32 = 50;
+const MARGIN: u32 = 20;
 
 /// Transparent/background color.
 const CLEAR_COLOR: Color = Color::BLUE;
