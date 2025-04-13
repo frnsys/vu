@@ -1,9 +1,10 @@
 use std::{fs::File, io::BufReader, path::Path};
 
-use fast_image_resize::{images::Image as FIRImage, FilterType, ResizeAlg, ResizeOptions, Resizer};
+use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer, images::Image as FIRImage};
 use image::{
+    AnimationDecoder, DynamicImage, GenericImageView, ImageBuffer, ImageDecoder, ImageResult,
+    RgbaImage,
     codecs::{gif::GifDecoder, webp::WebPDecoder},
-    AnimationDecoder, DynamicImage, GenericImageView, ImageBuffer, ImageDecoder, RgbaImage,
 };
 
 /// We can have either a single image
@@ -101,46 +102,40 @@ fn resize(src: DynamicImage, (dst_width, dst_height): (u32, u32)) -> DynamicImag
     DynamicImage::ImageRgba8(image_buffer)
 }
 
-fn read_single(path: &Path, (max_width, max_height): (u32, u32)) -> Option<Image> {
-    match image::open(path) {
-        Ok(mut img) => {
-            // Resize to fit if needed.
-            let mut size = img.dimensions();
-            let width_scale = max_width as f32 / size.0 as f32;
-            let height_scale = max_height as f32 / size.1 as f32;
-            let scale = width_scale.min(height_scale);
-            if scale < 1. {
-                let target_width = (scale * size.0 as f32).round() as u32;
-                let target_height = (scale * size.1 as f32).round() as u32;
-                img = resize(img, (target_width, target_height));
-                size = img.dimensions();
-            }
-            let rgba = img.to_rgba8();
-            let pixels: Vec<u8> = rgba.into_raw();
-            Some(Image::Single { data: pixels, size })
+fn read_single(path: &Path, (max_width, max_height): (u32, u32)) -> ImageResult<Image> {
+    image::open(path).map(|mut img| {
+        // Resize to fit if needed.
+        let mut size = img.dimensions();
+        let width_scale = max_width as f32 / size.0 as f32;
+        let height_scale = max_height as f32 / size.1 as f32;
+        let scale = width_scale.min(height_scale);
+        if scale < 1. {
+            let target_width = (scale * size.0 as f32).round() as u32;
+            let target_height = (scale * size.1 as f32).round() as u32;
+            img = resize(img, (target_width, target_height));
+            size = img.dimensions();
         }
-        Err(e) => {
-            eprintln!("Failed to load image: {}", e);
-            None
-        }
-    }
+        let rgba = img.to_rgba8();
+        let pixels: Vec<u8> = rgba.into_raw();
+        Image::Single { data: pixels, size }
+    })
 }
 
-pub fn read_image(path: &Path, max_size: (u32, u32)) -> Option<Image> {
+pub fn read_image(path: &Path, max_size: (u32, u32)) -> ImageResult<Image> {
     let ext = path.extension().and_then(|ext| ext.to_str());
     match ext {
         Some("gif") => {
             let file = File::open(path).expect("Failed to read gif");
             let reader = BufReader::new(file);
             let decoder = GifDecoder::new(reader).expect("Failed to decode gif");
-            Some(read_frames(decoder))
+            Ok(read_frames(decoder))
         }
         Some("webp") => {
             let file = File::open(path).expect("Failed to read webp");
             let reader = BufReader::new(file);
             let decoder = WebPDecoder::new(reader).expect("Failed to decode webp");
             if decoder.has_animation() {
-                Some(read_frames(decoder))
+                Ok(read_frames(decoder))
             } else {
                 read_single(path, max_size)
             }
