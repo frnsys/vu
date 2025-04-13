@@ -69,7 +69,7 @@ pub fn run(title: &str, should_focus: bool, image_path: &Path) -> anyhow::Result
                 }
             }
 
-            _ => handle_event(&window, event, target),
+            _ => handle_event(&window, &mut image_view, event, target),
         }
     })?;
 
@@ -78,6 +78,7 @@ pub fn run(title: &str, should_focus: bool, image_path: &Path) -> anyhow::Result
 
 fn handle_event(
     window: &Window,
+    image: &mut ImageView,
     event: Event<RequestNextFrame>,
     target: &EventLoopWindowTarget<RequestNextFrame>,
 ) {
@@ -98,6 +99,24 @@ fn handle_event(
         } => match key {
             KeyCode::KeyF => {
                 toggle_fullscreen(window);
+            }
+            KeyCode::KeyE => {
+                image.zoom_in();
+            }
+            KeyCode::KeyH => {
+                image.zoom_out();
+            }
+            KeyCode::ArrowUp => {
+                image.pan_up();
+            }
+            KeyCode::ArrowDown => {
+                image.pan_down();
+            }
+            KeyCode::ArrowRight => {
+                image.pan_right();
+            }
+            KeyCode::ArrowLeft => {
+                image.pan_left();
             }
             KeyCode::Escape | KeyCode::KeyQ => {
                 target.exit();

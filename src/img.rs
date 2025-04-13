@@ -1,6 +1,9 @@
 use std::{fs::File, io::BufReader, path::Path};
 
-use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer, images::Image as FIRImage};
+use fast_image_resize::{
+    FilterType, ResizeAlg, ResizeOptions, Resizer,
+    images::{Image as FIRImage, ImageRef as FIRImageRef},
+};
 use image::{
     AnimationDecoder, DynamicImage, GenericImageView, ImageBuffer, ImageDecoder, ImageResult,
     RgbaImage,
@@ -44,6 +47,32 @@ impl Image {
                 let data = &frames[*index % frames.len()];
                 *index += 1;
                 data
+            }
+        }
+    }
+
+    pub fn scaled(&self, scale: f32) -> Self {
+        match self {
+            Image::Single { data, size } => {
+                let (data, size) = scale_image_fast(data, *size, scale);
+                Image::Single { data, size }
+            }
+            Image::Sequence {
+                frames,
+                delays,
+                index,
+                size,
+            } => {
+                let target_size = scale_size(*size, scale);
+                Image::Sequence {
+                    frames: frames
+                        .iter()
+                        .map(|frame| scale_image_fast(frame, *size, scale).0)
+                        .collect(),
+                    delays: delays.clone(),
+                    index: *index,
+                    size: target_size,
+                }
             }
         }
     }
@@ -100,6 +129,37 @@ fn resize(src: DynamicImage, (dst_width, dst_height): (u32, u32)) -> DynamicImag
         ImageBuffer::from_raw(dst_width, dst_height, dst_image.into_vec())
             .expect("Failed to convert resized buffer to ImageBuffer");
     DynamicImage::ImageRgba8(image_buffer)
+}
+
+fn scale_image_fast(
+    image: &[u8],
+    (width, height): (u32, u32),
+    scale: f32,
+) -> (Vec<u8>, (u32, u32)) {
+    let target_size = scale_size((width, height), scale);
+    let src_image =
+        FIRImageRef::new(width, height, image, fast_image_resize::PixelType::U8x4).unwrap();
+    let mut dst_image = FIRImage::new(
+        target_size.0,
+        target_size.1,
+        fast_image_resize::PixelType::U8x4,
+    );
+    let mut resizer = Resizer::new();
+    resizer
+        .resize(
+            &src_image,
+            &mut dst_image,
+            &ResizeOptions::new().resize_alg(fast_image_resize::ResizeAlg::Nearest),
+        )
+        .unwrap();
+
+    (dst_image.into_vec(), target_size)
+}
+
+fn scale_size((width, height): (u32, u32), scale: f32) -> (u32, u32) {
+    let width_new = (width as f32 * scale).round() as u32;
+    let height_new = (height as f32 * scale).round() as u32;
+    (width_new, height_new)
 }
 
 fn read_single(path: &Path, (max_width, max_height): (u32, u32)) -> ImageResult<Image> {
