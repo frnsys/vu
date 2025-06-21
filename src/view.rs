@@ -41,11 +41,9 @@ impl ImageView {
             .unwrap();
         let scale_factor = mon.scale_factor();
 
-        // Minimum margin around images.
-        const MARGIN: u32 = 20;
         let mon_size = mon.size();
-        let (max_width, max_height) = (mon_size.width - MARGIN * 2, mon_size.height - MARGIN * 2);
-        let mut image = crate::img::read_image(image_path, (max_width, max_height))?;
+        let mon_size = (mon_size.width, mon_size.height);
+        let mut image = crate::img::read_image(image_path, mon_size)?;
 
         let (width, height) = image.size();
         let size = PhysicalSize::new(width as f64, height as f64);
@@ -88,21 +86,28 @@ impl ImageView {
         view_buffer_window(&mut self.pixels, image, self.pan);
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) -> anyhow::Result<()> {
+    pub fn resize(&mut self, width: u32, height: u32, fit_image: bool) -> anyhow::Result<()> {
         self.pixels.resize_surface(width, height)?;
         self.pixels.resize_buffer(width, height)?;
+
+        if fit_image {
+            let (w, h) = self.image.size();
+            let zoom = (width as f32 / w as f32).min(height as f32 / h as f32);
+            self.set_zoom(zoom);
+        }
         Ok(())
     }
 
     pub fn zoom_in(&mut self) {
-        self.zoom += ZOOM_STEP;
-        self.scaled = Some(self.image.scaled(self.zoom));
-        self.update();
-        self.draw();
+        self.set_zoom(self.zoom + ZOOM_STEP);
     }
 
     pub fn zoom_out(&mut self) {
-        self.zoom = (self.zoom - ZOOM_STEP).max(MIN_ZOOM);
+        self.set_zoom((self.zoom - ZOOM_STEP).max(MIN_ZOOM));
+    }
+
+    fn set_zoom(&mut self, zoom: f32) {
+        self.zoom = zoom;
         self.scaled = Some(self.image.scaled(self.zoom));
         self.update();
         self.draw();
