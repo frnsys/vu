@@ -68,6 +68,15 @@ pub fn run(title: &str, should_focus: bool, image_path: &Path) -> anyhow::Result
                     target.exit();
                 }
             }
+            Event::WindowEvent {
+                event: WindowEvent::Resized(size),
+                ..
+            } => {
+                image_view.resize(size.width, size.height).unwrap();
+                if !image_view.advance() {
+                    target.exit();
+                }
+            }
 
             _ => handle_event(&window, &mut image_view, event, target),
         }

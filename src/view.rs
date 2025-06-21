@@ -12,6 +12,7 @@ const CLEAR_COLOR: Color = Color::BLUE;
 
 const PAN_STEP: f32 = 0.1; // Percent of dimension
 const ZOOM_STEP: f32 = 0.1;
+const MIN_ZOOM: f32 = 0.5;
 
 pub struct ImageView {
     /// Current zoom level.
@@ -87,6 +88,12 @@ impl ImageView {
         view_buffer_window(&mut self.pixels, image, self.pan);
     }
 
+    pub fn resize(&mut self, width: u32, height: u32) -> anyhow::Result<()> {
+        self.pixels.resize_surface(width, height)?;
+        self.pixels.resize_buffer(width, height)?;
+        Ok(())
+    }
+
     pub fn zoom_in(&mut self) {
         self.zoom += ZOOM_STEP;
         self.scaled = Some(self.image.scaled(self.zoom));
@@ -95,7 +102,7 @@ impl ImageView {
     }
 
     pub fn zoom_out(&mut self) {
-        self.zoom = (self.zoom - ZOOM_STEP).max(1.);
+        self.zoom = (self.zoom - ZOOM_STEP).max(MIN_ZOOM);
         self.scaled = Some(self.image.scaled(self.zoom));
         self.update();
         self.draw();
@@ -144,8 +151,8 @@ impl ImageView {
         let texture = self.pixels.texture();
         let (tx_w, tx_h) = (texture.width(), texture.height());
 
-        let x_limit = (im_w as f32 / 2. - tx_w as f32 / 2.).floor() as i32;
-        let y_limit = (im_h as f32 / 2. - tx_h as f32 / 2.).floor() as i32;
+        let x_limit = ((im_w as f32 / 2. - tx_w as f32 / 2.).floor() as i32).max(0);
+        let y_limit = ((im_h as f32 / 2. - tx_h as f32 / 2.).floor() as i32).max(0);
         self.pan.0 = self.pan.0.clamp(-x_limit, x_limit);
         self.pan.1 = self.pan.1.clamp(-y_limit, y_limit);
     }
@@ -172,24 +179,41 @@ fn buffer_window(
     // Assumes RGBA (i.e. 4 channels).
     const CHANNELS: usize = 4;
 
-    let center_x = (img_width as i32) / 2 + offset_x;
-    let center_y = (img_height as i32) / 2 + offset_y;
+    // Padding for when `img` is smaller than `win`, to keep it centered.
+    let padding_x = (win_width.saturating_sub(img_width) / 2) as usize;
+    let padding_y = (win_height.saturating_sub(img_height) / 2) as usize;
 
-    // Calculate window bounds (clamped to image)
-    let half_w = (win_width as i32) / 2;
-    let half_h = (win_height as i32) / 2;
+    // Range of pixels to copy from the image, based on the window and any pan offset.
+    let (start_x, end_x) = centered_span(img_width as i32, win_width as i32, offset_x);
+    let (start_y, end_y) = centered_span(img_height as i32, win_height as i32, offset_y);
 
-    let start_x = (center_x - half_w).max(0).min(img_width as i32 - 1) as usize;
-    let end_x = (center_x + half_w).max(0).min(img_width as i32) as usize;
-    let start_y = (center_y - half_h).max(0).min(img_height as i32 - 1) as usize;
-    let end_y = (center_y + half_h).max(0).min(img_height as i32) as usize;
+    // Copy the in-window image pixels.
+    let end_y = end_y.min(img_height as usize);
+    let slice_width = (end_x - start_x).min(img_width as usize);
+    let mut result = vec![0u8; (win_width * win_height) as usize * CHANNELS];
+    for (i, y) in (start_y..end_y).enumerate() {
+        let a = flat_idx(start_x, y, img_width as usize) * CHANNELS;
+        let b = a + slice_width * CHANNELS;
+        let im_row = &buffer[a..b];
 
-    let mut result = Vec::with_capacity((end_x - start_x) * (end_y - start_y) * CHANNELS);
-    for y in start_y..=end_y {
-        let row_start = (y * img_width as usize + start_x) * CHANNELS;
-        let row_end = row_start + (end_x - start_x) * CHANNELS;
-        result.extend_from_slice(&buffer[row_start..row_end]);
+        let x = padding_x;
+        let y = padding_y + i;
+        let idx = flat_idx(x, y, win_width as usize) * CHANNELS;
+        let end_idx = idx + slice_width * CHANNELS;
+        result[idx..end_idx].copy_from_slice(im_row);
     }
 
     result
+}
+
+fn flat_idx(x: usize, y: usize, w: usize) -> usize {
+    y * w + x
+}
+
+fn centered_span(img_dim: i32, win_dim: i32, offset: i32) -> (usize, usize) {
+    let img_center = img_dim / 2 + offset;
+    let win_center = win_dim / 2;
+    let start = (img_center - win_center).max(0).min(img_dim) as usize;
+    let end = start + win_dim as usize;
+    (start, end)
 }
