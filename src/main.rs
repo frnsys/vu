@@ -25,7 +25,7 @@ fn main() -> anyhow::Result<()> {
     let args = match Args::parse() {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("Error: {}.", e);
+            eprintln!("Error: {e}");
             exit(1);
         }
     };
