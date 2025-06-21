@@ -8,7 +8,12 @@ use winit::{
 };
 
 /// Transparent/background color.
-const CLEAR_COLOR: Color = Color::BLUE;
+const CLEAR_COLOR: Color = Color {
+    r: 0.01,
+    g: 0.00,
+    b: 0.02,
+    a: 1.00,
+};
 
 const PAN_STEP: f32 = 0.1; // Percent of dimension
 const ZOOM_STEP: f32 = 0.1;
