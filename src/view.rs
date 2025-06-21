@@ -144,8 +144,8 @@ impl ImageView {
         let texture = self.pixels.texture();
         let (tx_w, tx_h) = (texture.width(), texture.height());
 
-        let x_limit = im_w as i32 / 2 - tx_w as i32 / 2;
-        let y_limit = im_h as i32 / 2 - tx_h as i32 / 2;
+        let x_limit = (im_w as f32 / 2. - tx_w as f32 / 2.).floor() as i32;
+        let y_limit = (im_h as f32 / 2. - tx_h as f32 / 2.).floor() as i32;
         self.pan.0 = self.pan.0.clamp(-x_limit, x_limit);
         self.pan.1 = self.pan.1.clamp(-y_limit, y_limit);
     }
