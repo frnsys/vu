@@ -185,7 +185,7 @@ fn buffer_window(
     let end_y = (center_y + half_h).max(0).min(img_height as i32) as usize;
 
     let mut result = Vec::with_capacity((end_x - start_x) * (end_y - start_y) * CHANNELS);
-    for y in start_y..end_y {
+    for y in start_y..=end_y {
         let row_start = (y * img_width as usize + start_x) * CHANNELS;
         let row_end = row_start + (end_x - start_x) * CHANNELS;
         result.extend_from_slice(&buffer[row_start..row_end]);
