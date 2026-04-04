@@ -79,9 +79,6 @@ impl Image {
 }
 
 /// Read frames from an animated format.
-///
-/// NOTE: `webp` decoding is slow and there's
-/// some compositing bug: <https://github.com/image-rs/image/issues/2320>
 fn read_frames<'a, D: AnimationDecoder<'a> + ImageDecoder>(decoder: D) -> Image {
     let size = decoder.dimensions();
     let decoded = decoder
