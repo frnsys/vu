@@ -2,6 +2,10 @@
 name = "vu"
 version = "0.3.2"
 edition = "2024"
+license = "MIT"
+keywords = ["image-viewer", "wayland"]
+homepage = "https://github.com/frnsys/vu"
+repository = "https://github.com/frnsys/vu"
 
 [dependencies]
 anyhow = "1.0.100"
