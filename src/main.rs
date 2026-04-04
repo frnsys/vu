@@ -4,7 +4,6 @@ use std::{path::PathBuf, process::exit};
 struct Args {
     path: PathBuf,
     title: String,
-    no_focus: bool,
 }
 impl Args {
     fn parse() -> Result<Self, pico_args::Error> {
@@ -12,7 +11,6 @@ impl Args {
         let args = Self {
             path: pargs.free_from_os_str(parse_path)?,
             title: pargs.opt_value_from_str("--title")?.unwrap_or("vu".into()),
-            no_focus: pargs.contains(["-n", "--no-focus"]),
         };
         Ok(args)
     }
@@ -30,5 +28,5 @@ fn main() -> anyhow::Result<()> {
         }
     };
 
-    vu::run(&args.title, !args.no_focus, &args.path)
+    vu::run(&args.title, &args.path)
 }

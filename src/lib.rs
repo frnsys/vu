@@ -13,7 +13,7 @@ use winit::{
     window::{Window, WindowBuilder, WindowLevel},
 };
 
-pub fn run(title: &str, should_focus: bool, image_path: &Path) -> anyhow::Result<()> {
+pub fn run(title: &str, image_path: &Path) -> anyhow::Result<()> {
     let event_loop = EventLoopBuilder::<RequestNextFrame>::with_user_event()
         .build()
         .expect("Failed to create event loop");
@@ -35,25 +35,6 @@ pub fn run(title: &str, should_focus: bool, image_path: &Path) -> anyhow::Result
 
     event_loop.run(move |event, target| {
         match event {
-            Event::WindowEvent {
-                event: WindowEvent::Focused(true),
-                ..
-            } => {
-                // This is a super-hacky, river-specific way
-                // of making the window unfocusable. Basically
-                // it punts focus back to whatever previously had focus.
-                // Ideally `winit` gets some better support for Wayland features;
-                // for example, in `sema` I use the `gtk` crate which lets you
-                // make a window unfocusable; I just don't want to port everything
-                // to that and this works ok for now.
-                if !should_focus {
-                    std::process::Command::new("riverctl")
-                        .args(["focus-view", "previous"])
-                        .output()
-                        .unwrap();
-                }
-            }
-
             // Go to the next frame in a sequence.
             Event::UserEvent(RequestNextFrame) => {
                 if !image_view.advance() {
