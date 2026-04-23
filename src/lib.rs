@@ -13,7 +13,7 @@ use winit::{
     window::{Window, WindowBuilder, WindowLevel},
 };
 
-pub fn run(title: &str, image_path: &Path) -> anyhow::Result<()> {
+pub fn run(title: &str, image_path: &Path, max_side: Option<u32>) -> anyhow::Result<()> {
     let event_loop = EventLoopBuilder::<RequestNextFrame>::with_user_event()
         .build()
         .expect("Failed to create event loop");
@@ -27,7 +27,7 @@ pub fn run(title: &str, image_path: &Path) -> anyhow::Result<()> {
         .build(&event_loop)
         .unwrap();
 
-    let mut image_view = ImageView::new(image_path, &window)?;
+    let mut image_view = ImageView::new(image_path, &window, max_side)?;
     let _animator = image_view
         .image
         .delays()

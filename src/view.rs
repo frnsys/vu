@@ -39,7 +39,7 @@ pub struct ImageView {
     scaled: Option<Image>,
 }
 impl ImageView {
-    pub fn new(image_path: &Path, window: &Window) -> anyhow::Result<Self> {
+    pub fn new(image_path: &Path, window: &Window, max_side: Option<u32>) -> anyhow::Result<Self> {
         let mon = window
             .current_monitor()
             .or_else(|| window.available_monitors().next())
@@ -47,8 +47,14 @@ impl ImageView {
         let scale_factor = mon.scale_factor();
 
         let mon_size = mon.size();
-        let mon_size = (mon_size.width, mon_size.height);
-        let mut image = crate::img::read_image(image_path, mon_size)?;
+        let max_bounds = match max_side {
+            Some(side) => {
+                let phys_side = (side as f64 * scale_factor).round() as u32;
+                (phys_side, phys_side)
+            }
+            None => (mon_size.width, mon_size.height),
+        };
+        let mut image = crate::img::read_image(image_path, max_bounds)?;
 
         let (width, height) = image.size();
         let size = PhysicalSize::new(width as f64, height as f64);

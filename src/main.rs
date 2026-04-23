@@ -4,6 +4,7 @@ use std::{path::PathBuf, process::exit};
 struct Args {
     path: PathBuf,
     title: String,
+    max_side: Option<u32>,
 }
 impl Args {
     fn parse() -> Result<Self, pico_args::Error> {
@@ -11,6 +12,7 @@ impl Args {
         let args = Self {
             path: pargs.free_from_os_str(parse_path)?,
             title: pargs.opt_value_from_str("--title")?.unwrap_or("vu".into()),
+            max_side: pargs.opt_value_from_str("--max-side")?,
         };
         Ok(args)
     }
@@ -28,5 +30,5 @@ fn main() -> anyhow::Result<()> {
         }
     };
 
-    vu::run(&args.title, &args.path)
+    vu::run(&args.title, &args.path, args.max_side)
 }
