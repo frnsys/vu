@@ -11,7 +11,7 @@ repository = "https://github.com/frnsys/vu"
 [dependencies]
 anyhow = "1.0.100"
 bpaf = { version = "0.9.25", features = ["derive"] }
-fast_image_resize = "5.5.0"
+fast_image_resize = "6.0.0"
 fontdue = "0.9.3"
 image = "0.25.9"
 pixels = "0.14.0"
