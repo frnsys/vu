@@ -39,7 +39,18 @@ pub struct ImageView {
     scaled: Option<Image>,
 }
 impl ImageView {
-    pub fn new(image_path: &Path, window: &Window, max_side: Option<u32>) -> anyhow::Result<Self> {
+    pub fn new(
+        image_path: &Path,
+        window: &Window,
+        max_side: Option<u32>,
+
+        // If `true`, the window will be resized to fit the image.
+        // If `false`, the image will be resized to fit the window.
+        //
+        // Note that resizing the window to fit the image can mess up
+        // the window positioning if it's already been positioned by the WM.
+        resize_window: bool,
+    ) -> anyhow::Result<Self> {
         let mon = window
             .current_monitor()
             .or_else(|| window.available_monitors().next())
@@ -54,30 +65,44 @@ impl ImageView {
             }
             None => (mon_size.width, mon_size.height),
         };
-        let mut image = crate::img::read_image(image_path, max_bounds)?;
 
-        let (width, height) = image.size();
-        let size = PhysicalSize::new(width as f64, height as f64);
-        let size = LogicalSize::<f64>::from_physical(size, scale_factor);
-        window
-            .request_inner_size(size)
-            .ok_or(anyhow::Error::msg("Failed to resize window"))?;
+        let image = crate::img::read_image(image_path, max_bounds)?;
+        let (mut width, mut height) = image.size();
+
+        if resize_window {
+            let size = PhysicalSize::new(width as f64, height as f64);
+            let size = LogicalSize::<f64>::from_physical(size, scale_factor);
+            window
+                .request_inner_size(size)
+                .ok_or(anyhow::Error::msg("Failed to resize window"))?;
+
+        // Fit this image to the existing window size.
+        } else {
+            let inner_size = window.inner_size();
+            width = inner_size.width.max(1);
+            height = inner_size.height.max(1);
+        }
 
         let surface_texture = SurfaceTexture::new(width, height, &window);
-        let mut pixels = PixelsBuilder::new(width, height, surface_texture)
+        let pixels = PixelsBuilder::new(width, height, surface_texture)
             .clear_color(CLEAR_COLOR)
             .build()?;
 
-        let pan = (0, 0);
-        view_buffer_window(&mut pixels, &mut image, pan);
-
-        Ok(Self {
+        let mut view = Self {
             zoom: 1.,
-            pan,
+            pan: (0, 0),
             pixels,
             image,
             scaled: None,
-        })
+        };
+
+        if !resize_window {
+            view.resize(width, height, true)?;
+        } else {
+            view.update();
+        }
+
+        Ok(view)
     }
 
     pub fn draw(&self) -> bool {

@@ -12,11 +12,11 @@ struct Args {
     #[bpaf(short, long)]
     max_side: Option<u32>,
 
-    #[bpaf(positional("PATH"))]
-    path: PathBuf,
+    #[bpaf(positional("PATHS"))]
+    paths: Vec<PathBuf>,
 }
 
 fn main() -> anyhow::Result<()> {
     let opts = args().run();
-    vu::run(&opts.title, &opts.path, opts.max_side)
+    vu::run(&opts.title, &opts.paths, opts.max_side)
 }
