@@ -5,7 +5,7 @@ mod view;
 use std::path::Path;
 
 use anim::{Animator, RequestNextFrame};
-use view::ImageView;
+use view::{ImageView, ViewOpts};
 use winit::{
     event::{ElementState, Event, KeyEvent, WindowEvent},
     event_loop::{EventLoopBuilder, EventLoopProxy},
@@ -24,12 +24,9 @@ impl Viewer {
         path: &Path,
         window: &Window,
         proxy: &EventLoopProxy<RequestNextFrame>,
-        max_side: Option<u32>,
-        resize_window: bool,
-        label: String,
-        show_label: bool,
+        opts: ViewOpts,
     ) -> anyhow::Result<Self> {
-        let view = ImageView::new(path, window, max_side, resize_window, label, show_label)?;
+        let view = ImageView::new(path, window, opts)?;
         let animator = view
             .image
             .delays()
@@ -59,6 +56,7 @@ pub fn run<P: AsRef<Path>>(
         let event_loop = EventLoopBuilder::<RequestNextFrame>::with_user_event()
             .build()
             .expect("Failed to create event loop");
+        let proxy = event_loop.create_proxy();
 
         // Note: For Wayland positioning has to happen via the window manager.
         let window = WindowBuilder::new()
@@ -70,21 +68,23 @@ pub fn run<P: AsRef<Path>>(
             .unwrap();
 
         let mut index: usize = 0;
-        let proxy = event_loop.create_proxy();
         let label = format!(
             "{} {}/{}",
             image_path.as_ref().display(),
             index + 1,
             image_paths.len()
         );
+
         let mut image_view = Viewer::new(
             image_path.as_ref(),
             &window,
             &proxy,
-            max_side,
-            true,
-            label,
-            false,
+            ViewOpts {
+                max_side,
+                resize_window: true,
+                show_label: false,
+                label,
+            },
         )?;
 
         event_loop.run(move |event, target| {
@@ -151,10 +151,12 @@ pub fn run<P: AsRef<Path>>(
                                         image_path.as_ref(),
                                         &window,
                                         &proxy,
-                                        max_side,
-                                        false,
-                                        label,
-                                        image_view.is_label_visible(),
+                                        ViewOpts {
+                                            max_side,
+                                            resize_window: false,
+                                            show_label: image_view.is_label_visible(),
+                                            label,
+                                        },
                                     );
                                     match view {
                                         Ok(view) => image_view = view,

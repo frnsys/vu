@@ -22,6 +22,19 @@ const PAN_STEP: f32 = 0.1; // Percent of dimension
 const ZOOM_STEP: f32 = 0.1;
 const MIN_ZOOM: f32 = 0.5;
 
+pub struct ViewOpts {
+    pub show_label: bool,
+    pub label: String,
+
+    /// If `true`, the window will be resized to fit the image.
+    /// If `false`, the image will be resized to fit the window.
+    ///
+    /// Note that resizing the window to fit the image can mess up
+    /// the window positioning if it's already been positioned by the WM.
+    pub resize_window: bool,
+    pub max_side: Option<u32>,
+}
+
 pub struct ImageView {
     /// Current zoom level.
     ///
@@ -45,21 +58,7 @@ pub struct ImageView {
     show_label: bool,
 }
 impl ImageView {
-    pub fn new(
-        image_path: &Path,
-        window: &Window,
-        max_side: Option<u32>,
-
-        // If `true`, the window will be resized to fit the image.
-        // If `false`, the image will be resized to fit the window.
-        //
-        // Note that resizing the window to fit the image can mess up
-        // the window positioning if it's already been positioned by the WM.
-        resize_window: bool,
-
-        label: String,
-        show_label: bool,
-    ) -> anyhow::Result<Self> {
+    pub fn new(image_path: &Path, window: &Window, opts: ViewOpts) -> anyhow::Result<Self> {
         let mon = window
             .current_monitor()
             .or_else(|| window.available_monitors().next())
@@ -67,7 +66,7 @@ impl ImageView {
         let scale_factor = mon.scale_factor();
 
         let mon_size = mon.size();
-        let max_bounds = match max_side {
+        let max_bounds = match opts.max_side {
             Some(side) => {
                 let phys_side = (side as f64 * scale_factor).round() as u32;
                 (phys_side, phys_side)
@@ -78,7 +77,7 @@ impl ImageView {
         let image = crate::img::read_image(image_path, max_bounds)?;
         let (mut width, mut height) = image.size();
 
-        if resize_window {
+        if opts.resize_window {
             let size = PhysicalSize::new(width as f64, height as f64);
             let size = LogicalSize::<f64>::from_physical(size, scale_factor);
             window
@@ -103,11 +102,11 @@ impl ImageView {
             pixels,
             image,
             scaled: None,
-            label,
-            show_label,
+            label: opts.label,
+            show_label: opts.show_label,
         };
 
-        if !resize_window {
+        if !opts.resize_window {
             view.resize(width, height, true)?;
         } else {
             view.update();
