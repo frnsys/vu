@@ -26,8 +26,10 @@ impl Viewer {
         proxy: &EventLoopProxy<RequestNextFrame>,
         max_side: Option<u32>,
         resize_window: bool,
+        label: String,
+        show_label: bool,
     ) -> anyhow::Result<Self> {
-        let view = ImageView::new(path, window, max_side, resize_window)?;
+        let view = ImageView::new(path, window, max_side, resize_window, label, show_label)?;
         let animator = view
             .image
             .delays()
@@ -69,7 +71,21 @@ pub fn run<P: AsRef<Path>>(
 
         let mut index: usize = 0;
         let proxy = event_loop.create_proxy();
-        let mut image_view = Viewer::new(image_path.as_ref(), &window, &proxy, max_side, true)?;
+        let label = format!(
+            "{} {}/{}",
+            image_path.as_ref().display(),
+            index + 1,
+            image_paths.len()
+        );
+        let mut image_view = Viewer::new(
+            image_path.as_ref(),
+            &window,
+            &proxy,
+            max_side,
+            true,
+            label,
+            false,
+        )?;
 
         event_loop.run(move |event, target| {
             match event {
@@ -104,6 +120,7 @@ pub fn run<P: AsRef<Path>>(
                             Action::PanDown => image_view.pan_down(),
                             Action::PanRight => image_view.pan_right(),
                             Action::PanLeft => image_view.pan_left(),
+                            Action::ToggleInfo => image_view.toggle_label(),
                             Action::ChangeImage(next) => {
                                 index = if next {
                                     if index >= image_paths.len() - 1 {
@@ -119,6 +136,13 @@ pub fn run<P: AsRef<Path>>(
                                     }
                                 };
                                 if let Some(image_path) = image_paths.get(index) {
+                                    let label = format!(
+                                        "{} {}/{}",
+                                        image_path.as_ref().display(),
+                                        index + 1,
+                                        image_paths.len()
+                                    );
+
                                     // Because by this point the WM has already positioned
                                     // the window, it's better to resize the image to the window
                                     // rather than vice-versa, because otherwise the window
@@ -129,6 +153,8 @@ pub fn run<P: AsRef<Path>>(
                                         &proxy,
                                         max_side,
                                         false,
+                                        label,
+                                        image_view.is_label_visible(),
                                     );
                                     match view {
                                         Ok(view) => image_view = view,
@@ -156,6 +182,7 @@ enum Action {
     PanDown,
     PanRight,
     PanLeft,
+    ToggleInfo,
     ChangeImage(bool),
     Quit,
 }
@@ -184,6 +211,7 @@ fn handle_event(event: Event<RequestNextFrame>) -> Option<Action> {
             KeyCode::ArrowLeft => Some(Action::PanLeft),
             KeyCode::Quote => Some(Action::ChangeImage(true)),
             KeyCode::Comma => Some(Action::ChangeImage(false)),
+            KeyCode::KeyI => Some(Action::ToggleInfo),
             KeyCode::Escape | KeyCode::KeyQ => Some(Action::Quit),
             _ => None,
         },

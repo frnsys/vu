@@ -1,11 +1,14 @@
-use std::path::Path;
+use std::{path::Path, sync::OnceLock};
 
 use crate::img::Image;
+use fontdue::{Font, FontSettings};
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture, wgpu::Color};
 use winit::{
     dpi::{LogicalSize, PhysicalSize},
     window::Window,
 };
+
+static FONT: OnceLock<Font> = OnceLock::new();
 
 /// Transparent/background color.
 const CLEAR_COLOR: Color = Color {
@@ -37,6 +40,9 @@ pub struct ImageView {
 
     /// If the image is zoomed, we cache the scaled image here.
     scaled: Option<Image>,
+
+    label: String,
+    show_label: bool,
 }
 impl ImageView {
     pub fn new(
@@ -50,6 +56,9 @@ impl ImageView {
         // Note that resizing the window to fit the image can mess up
         // the window positioning if it's already been positioned by the WM.
         resize_window: bool,
+
+        label: String,
+        show_label: bool,
     ) -> anyhow::Result<Self> {
         let mon = window
             .current_monitor()
@@ -94,6 +103,8 @@ impl ImageView {
             pixels,
             image,
             scaled: None,
+            label,
+            show_label,
         };
 
         if !resize_window {
@@ -120,6 +131,10 @@ impl ImageView {
         self.clamp_pan();
         let image = self.scaled.as_mut().unwrap_or(&mut self.image);
         view_buffer_window(&mut self.pixels, image, self.pan);
+
+        if self.show_label {
+            self.draw_label();
+        }
     }
 
     pub fn resize(&mut self, width: u32, height: u32, fit_image: bool) -> anyhow::Result<()> {
@@ -196,6 +211,81 @@ impl ImageView {
         let y_limit = ((im_h as f32 / 2. - tx_h as f32 / 2.).floor() as i32).max(0);
         self.pan.0 = self.pan.0.clamp(-x_limit, x_limit);
         self.pan.1 = self.pan.1.clamp(-y_limit, y_limit);
+    }
+
+    pub fn toggle_label(&mut self) {
+        self.show_label = !self.show_label;
+        self.update();
+        self.draw();
+    }
+
+    pub fn is_label_visible(&self) -> bool {
+        self.show_label
+    }
+
+    fn draw_label(&mut self) {
+        let font = FONT.get_or_init(|| {
+            let font_data = include_bytes!("../font.ttf") as &[u8];
+            Font::from_bytes(font_data, FontSettings::default()).expect("Failed to load font.ttf")
+        });
+
+        let texture = self.pixels.texture();
+        let width = texture.width() as i32;
+        let height = texture.height() as i32;
+        let frame = self.pixels.frame_mut();
+
+        let font_size = 20.0;
+        let padding = 15.0;
+
+        // Calculate the total width of the string to right-align it
+        let mut total_width = 0.0;
+        for c in self.label.chars() {
+            total_width += font.metrics(c, font_size).advance_width;
+        }
+
+        let start_x = width as f32 - total_width - padding;
+        let start_y = height as f32 - font_size - padding;
+
+        // Draw shadow
+        let passes = [
+            (2.0, 2.0, 0.0),   // Shadow: X offset, Y offset, Color
+            (0.0, 0.0, 255.0), // Text: X offset, Y offset, Color
+        ];
+
+        for (offset_x, offset_y, color_val) in passes {
+            let mut cursor_x = start_x + offset_x;
+            let cursor_y = start_y + offset_y;
+
+            for c in self.label.chars() {
+                let (metrics, bitmap) = font.rasterize(c, font_size);
+
+                for (i, &coverage) in bitmap.iter().enumerate() {
+                    let lx = (i % metrics.width) as i32;
+                    let ly = (i / metrics.width) as i32;
+
+                    // Calculate screen pixel coordinates
+                    let px = cursor_x as i32 + metrics.xmin + lx;
+                    // Font y-axis usually originates from the baseline
+                    let py =
+                        cursor_y as i32 + font_size as i32 - metrics.height as i32 - metrics.ymin
+                            + ly;
+
+                    // If pixel is within bounds and has some opacity
+                    if px >= 0 && px < width && py >= 0 && py < height && coverage > 0 {
+                        let idx = ((py * width + px) * 4) as usize;
+                        let alpha = coverage as f32 / 255.0;
+
+                        // Alpha blending
+                        for color_channel in 0..3 {
+                            let bg = frame[idx + color_channel] as f32;
+                            frame[idx + color_channel] =
+                                ((color_val * alpha) + (bg * (1.0 - alpha))) as u8;
+                        }
+                    }
+                }
+                cursor_x += metrics.advance_width;
+            }
+        }
     }
 }
 
