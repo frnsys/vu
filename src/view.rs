@@ -274,12 +274,16 @@ impl ImageView {
                         let idx = ((py * width + px) * 4) as usize;
                         let alpha = coverage as f32 / 255.0;
 
-                        // Alpha blending
+                        // Blend RGB
                         for color_channel in 0..3 {
                             let bg = frame[idx + color_channel] as f32;
                             frame[idx + color_channel] =
                                 ((color_val * alpha) + (bg * (1.0 - alpha))) as u8;
                         }
+
+                        // Blend Alpha
+                        let bg_alpha = frame[idx + 3] as f32;
+                        frame[idx + 3] = ((255.0 * alpha) + (bg_alpha * (1.0 - alpha))) as u8;
                     }
                 }
                 cursor_x += metrics.advance_width;
