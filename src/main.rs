@@ -1,34 +1,22 @@
-use std::{path::PathBuf, process::exit};
+use bpaf::Bpaf;
+use std::path::PathBuf;
 
-#[derive(Debug)]
+#[derive(Debug, Bpaf)]
+#[bpaf(options, version)]
 struct Args {
-    path: PathBuf,
+    /// Window title
+    #[bpaf(short, long, fallback("vu".to_string()))]
     title: String,
+
+    /// Window size limit
+    #[bpaf(short, long)]
     max_side: Option<u32>,
-}
-impl Args {
-    fn parse() -> Result<Self, pico_args::Error> {
-        let mut pargs = pico_args::Arguments::from_env();
-        let args = Self {
-            path: pargs.free_from_os_str(parse_path)?,
-            title: pargs.opt_value_from_str("--title")?.unwrap_or("vu".into()),
-            max_side: pargs.opt_value_from_str("--max-side")?,
-        };
-        Ok(args)
-    }
-}
-fn parse_path(s: &std::ffi::OsStr) -> Result<PathBuf, &'static str> {
-    Ok(s.into())
+
+    #[bpaf(positional("PATH"))]
+    path: PathBuf,
 }
 
 fn main() -> anyhow::Result<()> {
-    let args = match Args::parse() {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Error: {e}");
-            exit(1);
-        }
-    };
-
-    vu::run(&args.title, &args.path, args.max_side)
+    let opts = args().run();
+    vu::run(&opts.title, &opts.path, opts.max_side)
 }
