@@ -10,8 +10,8 @@ use winit::{
 /// Transparent/background color.
 const CLEAR_COLOR: Color = Color {
     r: 0.01,
-    g: 0.00,
-    b: 0.02,
+    g: 0.01,
+    b: 0.01,
     a: 1.00,
 };
 
